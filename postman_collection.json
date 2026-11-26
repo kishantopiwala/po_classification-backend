@@ -1,0 +1,263 @@
+{
+  "info": {
+    "name": "PO Classification - Upload and SSE",
+    "description": "Start the backend on localhost:8000. Select a PDF in Upload PDF, then send Watch events. Set Postman request timeout to 0. Run these requests manually; this collection contains a streaming response.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "job_id",
+      "value": ""
+    },
+    {
+      "key": "last_event_id",
+      "value": "1"
+    },
+    {
+      "key": "po_id",
+      "value": ""
+    },
+    {
+      "key": "document_id",
+      "value": ""
+    },
+    {
+      "key": "chat_session_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Upload PDF",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "Select your PDF file here."
+            }
+          ]
+        },
+        "url": "{{base_url}}/api/v1/extractions",
+        "description": "Choose a local PDF in Body > form-data. Postman sets the multipart boundary automatically. A successful response saves job_id."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Upload accepted\", () => pm.response.to.have.status(202));",
+              "if (pm.response.code === 202) {",
+              "  pm.collectionVariables.set(\"job_id\", pm.response.json().job_id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Watch events",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/event-stream"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/extractions/{{job_id}}/events",
+        "description": "Observe progress, heartbeat, and completed/failed events. The terminal event closes the stream and completed includes the full result."
+      }
+    },
+    {
+      "name": "3. Get status or result",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/v1/extractions/{{job_id}}"
+      }
+    },
+    {
+      "name": "4. Resume events",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/event-stream"
+          },
+          {
+            "key": "Last-Event-ID",
+            "value": "{{last_event_id}}"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/extractions/{{job_id}}/events",
+        "description": "Set last_event_id to the last id received for this job. Only later events are replayed. Heartbeats have no id."
+      }
+    },
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "General chat",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello! What can you do?\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/v1/chat",
+        "description": "Test the configured Ollama model without a PDF. Include earlier messages to continue the conversation. Returns one completed response."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Chat succeeded\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) {",
+              "  const body = pm.response.json();",
+              "  pm.test(\"Completed assistant response\", () => {",
+              "    pm.expect(body.done).to.eql(true);",
+              "    pm.expect(body.message.role).to.eql(\"assistant\");",
+              "    pm.expect(body.message.content).to.be.a(\"string\").and.not.empty;",
+              "  });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "PO search",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/purchase-orders/search",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"item_query\": \"Honeycrisp\",\n  \"date_from\": \"2024-04-01\",\n  \"date_before\": \"2024-05-01\",\n  \"limit\": 20\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200 && pm.response.json().results.length) { const po = pm.response.json().results[0]; pm.collectionVariables.set(\"po_id\", po.id); pm.collectionVariables.set(\"document_id\", po.document_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "PO details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/v1/purchase-orders/{{po_id}}"
+      }
+    },
+    {
+      "name": "Original PDF",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/v1/documents/{{document_id}}/download"
+      }
+    },
+    {
+      "name": "PO chat - new conversation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/po-chat",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Find Honeycrisp bags ordered in April 2024\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) { pm.collectionVariables.set(\"chat_session_id\", pm.response.json().session_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "PO chat - follow-up",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/po-chat",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"session_id\": \"{{chat_session_id}}\",\n  \"message\": \"Show the first PO and its items\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
