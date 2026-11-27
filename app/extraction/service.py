@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .prompts import SYSTEM_PROMPT, build_prompt
+from .prompts import PROMPT_FILE, SYSTEM_PROMPT, build_prompt
 
 
 class ExtractionError(Exception):
@@ -225,6 +225,7 @@ def main(argv=None):
     try:
         if args.output and args.output.resolve() in {
             args.pdf.resolve(),
+            PROMPT_FILE,
             Path(__file__).resolve().with_name("prompts.py"),
             Path(__file__).resolve().with_name("extraction_prompt.py"),
             Path(__file__).resolve().parents[3] / "extraction_prompt.py",
